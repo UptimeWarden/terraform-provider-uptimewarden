@@ -34,13 +34,15 @@ type CreateMonitorRequest struct {
 }
 
 // UpdateMonitorRequest is the body for PATCH /api/v1/monitors/{id}.
+// Timeout and Region are pointers: nil leaves the stored value unchanged,
+// which is what the provider sends when the attribute is not configured.
 type UpdateMonitorRequest struct {
-	Name     string `json:"name,omitempty"`
-	URL      string `json:"url,omitempty"`
-	Interval int    `json:"interval,omitempty"`
-	Timeout  int    `json:"timeout,omitempty"`
-	Region   string `json:"region,omitempty"`
-	IsActive *bool  `json:"isActive,omitempty"`
+	Name     string  `json:"name,omitempty"`
+	URL      string  `json:"url,omitempty"`
+	Interval int     `json:"interval,omitempty"`
+	Timeout  *int    `json:"timeout,omitempty"`
+	Region   *string `json:"region,omitempty"`
+	IsActive *bool   `json:"isActive,omitempty"`
 }
 
 // GetMonitor fetches a single monitor by its public ID.

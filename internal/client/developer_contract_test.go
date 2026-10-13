@@ -143,21 +143,36 @@ func TestUpdateMonitor_V1Patch(t *testing.T) {
 	}
 }
 
-func TestRegionDocs_AEIsAustraliaEastNotDubai(t *testing.T) {
+// Region labels follow the regions table the dashboard reads (migrations
+// 0272 and 0372): ae Sydney, brs São Paulo, gwc Sweden Central, sea East Asia,
+// wus3 Phoenix. uaen (Dubai) is retired and must not be offered.
+func TestRegionDocs_MatchRegionsTable(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("runtime.Caller failed")
 	}
-	root := filepath.Join(filepath.Dir(thisFile), "..", "provider")
-	src, err := os.ReadFile(filepath.Join(root, "monitor_resource.go"))
-	if err != nil {
-		t.Fatalf("read monitor_resource.go: %v", err)
-	}
-	text := string(src)
-	if strings.Contains(text, "`ae` (Dubai)") {
-		t.Fatalf("schema still labels ae as Dubai; canonical is Australia East")
-	}
-	if !strings.Contains(text, "`ae` (Australia East)") {
-		t.Fatalf("schema must label ae as Australia East")
+	repo := filepath.Join(filepath.Dir(thisFile), "..", "..")
+	for _, rel := range []string{
+		"internal/provider/monitor_resource.go",
+		"docs/resources/monitor.md",
+		"README.md",
+	} {
+		src, err := os.ReadFile(filepath.Join(repo, rel))
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		text := string(src)
+		for _, want := range []string{
+			"`ae` (Sydney)", "`brs` (São Paulo)", "`gwc` (Sweden Central)", "`sea` (East Asia)", "`wus3` (Phoenix)",
+		} {
+			if !strings.Contains(text, want) {
+				t.Errorf("%s: missing region label %s", rel, want)
+			}
+		}
+		for _, stale := range []string{"uaen", "Frankfurt", "Singapore", "Dubai"} {
+			if strings.Contains(text, stale) {
+				t.Errorf("%s: stale region reference %q", rel, stale)
+			}
+		}
 	}
 }
