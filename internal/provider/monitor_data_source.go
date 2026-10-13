@@ -4,14 +4,15 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/uptimewarden/terraform-provider-uptimewarden/internal/client"
 )
 
-// Ensure uptimewardenMonitorDataSource implements datasource.DataSource.
 var _ datasource.DataSource = &uptimewardenMonitorDataSource{}
 
 // NewMonitorDataSource is registered in provider.go.
@@ -19,21 +20,8 @@ func NewMonitorDataSource() datasource.DataSource {
 	return &uptimewardenMonitorDataSource{}
 }
 
-// uptimewardenMonitorDataSource reads an existing monitor by publicId.
 type uptimewardenMonitorDataSource struct {
 	client *client.Client
-}
-
-// monitorDataSourceModel maps the data source HCL block.
-type monitorDataSourceModel struct {
-	ID       types.String `tfsdk:"id"`
-	Name     types.String `tfsdk:"name"`
-	Type     types.String `tfsdk:"type"`
-	URL      types.String `tfsdk:"url"`
-	Interval types.Int64  `tfsdk:"interval"`
-	Timeout  types.Int64  `tfsdk:"timeout"`
-	Region   types.String `tfsdk:"region"`
-	IsActive types.Bool   `tfsdk:"is_active"`
 }
 
 func (d *uptimewardenMonitorDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -42,58 +30,66 @@ func (d *uptimewardenMonitorDataSource) Metadata(_ context.Context, req datasour
 
 func (d *uptimewardenMonitorDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Reads an existing UptimeWarden monitor by its public ID. Use this data source to reference a monitor managed outside of Terraform (e.g. created via the UI or API).",
-		Attributes: map[string]schema.Attribute{
-			"id": schema.StringAttribute{
-				MarkdownDescription: "Public ID of the monitor to look up.",
-				Required:            true,
-			},
-			"name":      schema.StringAttribute{MarkdownDescription: "Monitor name.", Computed: true},
-			"type":      schema.StringAttribute{MarkdownDescription: "Monitor protocol type.", Computed: true},
-			"url":       schema.StringAttribute{MarkdownDescription: "Target URL or address.", Computed: true},
-			"interval":  schema.Int64Attribute{MarkdownDescription: "Check interval in seconds.", Computed: true},
-			"timeout":   schema.Int64Attribute{MarkdownDescription: "Request timeout in seconds.", Computed: true},
-			"region":    schema.StringAttribute{MarkdownDescription: "Home region code (`ae`, `brs`, `gwc`, `sea` or `wus3`). Null when the monitor is placed automatically.", Computed: true},
-			"is_active": schema.BoolAttribute{MarkdownDescription: "Whether the monitor is actively checking.", Computed: true},
-		},
+		MarkdownDescription: "Reads an existing UptimeWarden monitor by its public ID, with every field the API returns.",
+		Attributes:          dataSourceAttributes(),
 	}
 }
 
 func (d *uptimewardenMonitorDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
-	if req.ProviderData == nil {
-		return
-	}
-	c, ok := req.ProviderData.(*client.Client)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected provider data type",
-			fmt.Sprintf("Expected *client.Client, got: %T", req.ProviderData),
-		)
-		return
-	}
-	d.client = c
+	d.client = configureDataSourceClient(req, resp)
 }
 
 func (d *uptimewardenMonitorDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	var state monitorDataSourceModel
-	resp.Diagnostics.Append(req.Config.Get(ctx, &state)...)
+	var id types.String
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("id"), &id)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	m, err := d.client.GetMonitor(ctx, state.ID.ValueString())
+	m, err := d.client.GetMonitor(ctx, id.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading monitor", err.Error())
 		return
 	}
 
-	state.Name = types.StringValue(m.Name)
-	state.Type = types.StringValue(m.Type)
-	state.URL = types.StringValue(m.URL)
-	state.Interval = types.Int64Value(int64(m.Interval))
-	state.Timeout = types.Int64Value(int64(m.Timeout))
-	state.Region = regionValue(m.Region)
-	state.IsActive = types.BoolValue(m.IsActive)
+	attrs := monitorStateFromAPI(m, nil)
+	types_ := monitorObjectType().AttrTypes
+	for _, f := range dataSourceOnlyFields {
+		attrs[f.tf] = fromAPI(f, m[f.api], nil)
+		types_[f.tf] = f.attrType()
+	}
+	obj, diags := types.ObjectValue(types_, attrs)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	resp.Diagnostics.Append(resp.State.Set(ctx, obj)...)
+}
 
-	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
+// configureDataSourceClient is the shared Configure for the data sources.
+func configureDataSourceClient(req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) *client.Client {
+	if req.ProviderData == nil {
+		return nil
+	}
+	c, ok := req.ProviderData.(*client.Client)
+	if !ok {
+		resp.Diagnostics.AddError("Unexpected provider data type", fmt.Sprintf("Expected *client.Client, got: %T", req.ProviderData))
+		return nil
+	}
+	return c
+}
+
+// optString maps a nullable API string to a Terraform value.
+func optString(s *string) types.String {
+	if s == nil {
+		return types.StringNull()
+	}
+	return types.StringValue(*s)
+}
+
+func stringList(items []string) types.List {
+	vals := make([]attr.Value, 0, len(items))
+	for _, s := range items {
+		vals = append(vals, types.StringValue(s))
+	}
+	return types.ListValueMust(types.StringType, vals)
 }

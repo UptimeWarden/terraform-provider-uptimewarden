@@ -16,130 +16,107 @@ import (
 )
 
 // Developer contract: API tokens (`uptw_`) authenticate only on /api/v1/*.
-// The Terraform client talks to that surface and unwraps {success,data}.
+// The Terraform client talks to that surface, by public id, and unwraps
+// {success,data}.
 
-func TestCreateMonitor_V1PathAndEnvelope(t *testing.T) {
+const pid = "01HWTEST0000000000000001"
+
+func TestCreateMonitor_V1PathEnvelopeAndSource(t *testing.T) {
 	var gotPath, gotAuth, gotSource string
 	var body map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		gotAuth = r.Header.Get("Authorization")
-		gotSource = r.Header.Get("X-Source")
+		gotPath, gotAuth, gotSource = r.URL.Path, r.Header.Get("Authorization"), r.Header.Get("X-Source")
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		fmt.Fprint(w, `{
-			"success": true,
-			"data": {
-				"id": 42,
-				"publicId": "01HWTEST0000000000000001",
-				"name": "My API",
-				"type": "http",
-				"url": "https://api.example.com/health",
-				"interval": 60,
-				"timeout": 30,
-				"region": "gwc",
-				"isActive": true,
-				"managedBySource": "terraform"
-			}
-		}`)
+		fmt.Fprintf(w, `{"success":true,"data":{"publicId":%q,"name":"My API","type":"http","timeout":45}}`, pid)
 	}))
 	defer srv.Close()
 
 	c := client.New(srv.URL, "uptw_test")
-	active := true
-	m, err := c.CreateMonitor(context.Background(), client.CreateMonitorRequest{
-		Name:     "My API",
-		Type:     "http",
-		URL:      "https://api.example.com/health",
-		Interval: 60,
-		Region:   "gwc",
-		IsActive: &active,
-	})
+	m, err := c.CreateMonitor(context.Background(), map[string]any{"name": "My API", "type": "http", "timeout": 45})
 	if err != nil {
 		t.Fatalf("CreateMonitor: %v", err)
 	}
-	if gotPath != "/api/v1/monitors" {
-		t.Errorf("path: want /api/v1/monitors, got %s", gotPath)
+	if gotPath != "/api/v1/monitors" || gotAuth != "Bearer uptw_test" || gotSource != "terraform" {
+		t.Errorf("request: path %s auth %q source %q", gotPath, gotAuth, gotSource)
 	}
-	if gotAuth != "Bearer uptw_test" {
-		t.Errorf("Authorization: want Bearer uptw_test, got %q", gotAuth)
+	if body["managedBySource"] != "terraform" || body["timeout"] != 45.0 {
+		t.Errorf("body: %v", body)
 	}
-	if gotSource != "terraform" {
-		t.Errorf("X-Source: want terraform, got %q", gotSource)
-	}
-	if body["managedBySource"] != "terraform" {
-		t.Errorf("managedBySource: want terraform, got %v", body["managedBySource"])
-	}
-	if m.PublicID != "01HWTEST0000000000000001" {
-		t.Errorf("PublicID: got %q", m.PublicID)
+	if m.PublicID() != pid || m["timeout"] != 45.0 {
+		t.Errorf("unwrap: %v", m)
 	}
 }
 
-func TestGetMonitor_V1ULIDPath(t *testing.T) {
-	var gotPath string
+func TestMonitorPaths_UsePublicID(t *testing.T) {
+	var calls []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
+		calls = append(calls, r.Method+" "+r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"success":true,"data":{"id":42,"publicId":"01HWTEST0000000000000001","name":"x","type":"http","url":"https://x","interval":60,"timeout":30,"isActive":true}}`)
+		fmt.Fprintf(w, `{"success":true,"data":{"publicId":%q,"name":"x"}}`, pid)
 	}))
 	defer srv.Close()
 
 	c := client.New(srv.URL, "uptw_test")
-	m, err := c.GetMonitor(context.Background(), "01HWTEST0000000000000001")
-	if err != nil {
-		t.Fatalf("GetMonitor: %v", err)
+	ctx := context.Background()
+	if _, err := c.GetMonitor(ctx, pid); err != nil {
+		t.Fatal(err)
 	}
-	if gotPath != "/api/v1/monitors/01HWTEST0000000000000001" {
-		t.Errorf("path: want /api/v1/monitors/{publicId}, got %s", gotPath)
+	if _, err := c.UpdateMonitor(ctx, pid, map[string]any{"name": "x"}); err != nil {
+		t.Fatal(err)
 	}
-	if m.PublicID != "01HWTEST0000000000000001" {
-		t.Errorf("publicId unwrap: got %q", m.PublicID)
+	if err := c.DeleteMonitor(ctx, pid); err != nil {
+		t.Fatal(err)
 	}
-}
-
-func TestDeleteMonitor_V1ULIDPath(t *testing.T) {
-	var gotPath string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, `{"success":true,"message":"Monitor deleted successfully"}`)
-	}))
-	defer srv.Close()
-
-	c := client.New(srv.URL, "uptw_test")
-	if err := c.DeleteMonitor(context.Background(), "01HWTEST0000000000000001"); err != nil {
-		t.Fatalf("DeleteMonitor: %v", err)
-	}
-	if gotPath != "/api/v1/monitors/01HWTEST0000000000000001" {
-		t.Errorf("want /api/v1/monitors/{publicId}, got %s", gotPath)
+	want := []string{"GET /api/v1/monitors/" + pid, "PATCH /api/v1/monitors/" + pid, "DELETE /api/v1/monitors/" + pid}
+	if strings.Join(calls, ",") != strings.Join(want, ",") {
+		t.Errorf("calls: got %v want %v", calls, want)
 	}
 }
 
-func TestUpdateMonitor_V1Patch(t *testing.T) {
-	var gotPath string
+func TestAPIError_V1Envelope(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		if r.Method != http.MethodPatch {
-			t.Errorf("method: want PATCH, got %s", r.Method)
-		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"success":true,"data":{"id":42,"publicId":"01HWTEST0000000000000001","name":"renamed","type":"http","url":"https://x","interval":60,"timeout":30,"isActive":true}}`)
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, `{"success":false,"error":{"code":"VALIDATION_ERROR","message":"Invalid monitoring region","details":["Valid regions: ae, brs, gwc, sea, wus3"]}}`)
 	}))
 	defer srv.Close()
 
-	c := client.New(srv.URL, "uptw_test")
-	m, err := c.UpdateMonitor(context.Background(), "01HWTEST0000000000000001", client.UpdateMonitorRequest{
-		Name: "renamed",
+	_, err := client.New(srv.URL, "uptw_test").CreateMonitor(context.Background(), map[string]any{"region": "uaen"})
+	want := "UptimeWarden API 400 VALIDATION_ERROR: Invalid monitoring region (Valid regions: ae, brs, gwc, sea, wus3)"
+	if err == nil || err.Error() != want {
+		t.Fatalf("error: got %v, want %q", err, want)
+	}
+}
+
+func TestReferenceLists(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/escalation-policies", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"success":true,"data":[{"publicId":"01HWPOL0000000000000000001","name":"P1","stepCount":2,"createdAt":"c","updatedAt":"u"}]}`)
 	})
-	if err != nil {
-		t.Fatalf("UpdateMonitor: %v", err)
+	mux.HandleFunc("GET /api/v1/webhooks", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"success":true,"data":[{"publicId":"01HWHOOK000000000000000001","name":"Slack","description":null,"messageFormat":"slack","isActive":true,"enabledAlertTypes":["down"],"enabledMonitorTypes":[],"createdAt":"c"}]}`)
+	})
+	mux.HandleFunc("GET /api/v1/regions", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"success":true,"data":[{"code":"gwc","name":"Sweden Central","description":"Europe","isDefault":true}],"plan":{"regionSelection":false,"maxRegions":1,"maxVerificationRegions":2,"defaultConfirmingRegions":2,"allowConsensusOverride":false}}`)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	c := client.New(srv.URL, "uptw_test")
+	ctx := context.Background()
+
+	pols, err := c.ListEscalationPolicies(ctx)
+	if err != nil || len(pols) != 1 || pols[0].Name != "P1" || pols[0].StepCount != 2 {
+		t.Fatalf("policies: %v %v", pols, err)
 	}
-	if gotPath != "/api/v1/monitors/01HWTEST0000000000000001" {
-		t.Errorf("path: want /api/v1/monitors/{publicId}, got %s", gotPath)
+	hooks, err := c.ListWebhooks(ctx)
+	if err != nil || len(hooks) != 1 || hooks[0].PublicID != "01HWHOOK000000000000000001" || hooks[0].Description != nil {
+		t.Fatalf("webhooks: %v %v", hooks, err)
 	}
-	if m.Name != "renamed" {
-		t.Errorf("name unwrap: got %q", m.Name)
+	regs, err := c.ListRegions(ctx)
+	if err != nil || len(regs.Regions) != 1 || regs.Plan == nil || regs.Plan.MaxVerificationRegions != 2 {
+		t.Fatalf("regions: %+v %v", regs, err)
 	}
 }
 
@@ -153,7 +130,7 @@ func TestRegionDocs_MatchRegionsTable(t *testing.T) {
 	}
 	repo := filepath.Join(filepath.Dir(thisFile), "..", "..")
 	for _, rel := range []string{
-		"internal/provider/monitor_resource.go",
+		"internal/provider/monitor_fields.go",
 		"docs/resources/monitor.md",
 		"README.md",
 	} {

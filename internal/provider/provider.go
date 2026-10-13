@@ -101,6 +101,9 @@ func (p *uptimewardenProvider) Resources(_ context.Context) []func() resource.Re
 func (p *uptimewardenProvider) DataSources(_ context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		NewMonitorDataSource,
+		NewRegionsDataSource,
+		NewEscalationPolicyDataSource,
+		NewWebhookDataSource,
 	}
 }
 

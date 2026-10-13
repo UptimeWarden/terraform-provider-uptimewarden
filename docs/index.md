@@ -1,7 +1,7 @@
 ---
 page_title: "UptimeWarden Provider"
 description: |-
-  The UptimeWarden provider manages UptimeWarden monitors.
+  The UptimeWarden provider manages UptimeWarden monitors and reads regions, escalation policies and webhooks.
 ---
 
 # UptimeWarden Provider
@@ -10,11 +10,17 @@ The UptimeWarden provider manages your UptimeWarden monitors as code: the same
 `terraform plan`, review process and state file as the rest of your
 infrastructure.
 
-It authenticates with an UptimeWarden API token (`uptw_...`). The API accepts
-these tokens on its `/api/v1` monitor endpoints, so the provider offers the
-`uptimewarden_monitor` resource and data source. Status pages, escalation
-policies and on-call schedules are planned as resources once the API exposes
-them to API tokens.
+It authenticates with an UptimeWarden API token (`uptw_...`) on the `/api/v1`
+API and offers:
+
+- the `uptimewarden_monitor` resource, with every monitor setting the dashboard has;
+- data sources `uptimewarden_monitor`, `uptimewarden_regions`,
+  `uptimewarden_escalation_policy` and `uptimewarden_webhook` (by name).
+
+Resources for status pages, escalation policies, webhooks and on-call
+schedules are planned once the API accepts API tokens for writing them; until
+then create those in the dashboard and reference policies and webhooks from
+monitors.
 
 ## Example Usage
 

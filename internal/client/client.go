@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -46,15 +47,66 @@ func New(baseURL, apiToken string) *Client {
 	}
 }
 
-// APIError is returned when the API responds with a non-2xx status.
+// APIError is returned when the API responds with a non-2xx status. Code,
+// Message and Details come from the v1 error envelope
+// {success:false, error:{code, message, details?}} when the body has one.
 type APIError struct {
 	StatusCode int
 	Body       string
 	URL        string
+	Code       string
+	Message    string
+	Details    []string
 }
 
 func (e *APIError) Error() string {
-	return fmt.Sprintf("uptimewarden API error %d on %s: %s", e.StatusCode, e.URL, e.Body)
+	if e.Message == "" {
+		return fmt.Sprintf("uptimewarden API error %d on %s: %s", e.StatusCode, e.URL, e.Body)
+	}
+	msg := fmt.Sprintf("UptimeWarden API %d", e.StatusCode)
+	if e.Code != "" {
+		msg += " " + e.Code
+	}
+	msg += ": " + e.Message
+	if len(e.Details) > 0 {
+		msg += " (" + strings.Join(e.Details, "; ") + ")"
+	}
+	return msg
+}
+
+// parseAPIError fills Code, Message and Details from a v1 error envelope.
+// details may be a string, a list of strings or anything else (rendered as
+// JSON).
+func parseAPIError(e *APIError) {
+	var env struct {
+		Error *struct {
+			Code    string          `json:"code"`
+			Message string          `json:"message"`
+			Details json.RawMessage `json:"details"`
+		} `json:"error"`
+		Message string `json:"message"`
+	}
+	if json.Unmarshal([]byte(e.Body), &env) != nil {
+		return
+	}
+	if env.Error == nil {
+		e.Message = env.Message
+		return
+	}
+	e.Code, e.Message = env.Error.Code, env.Error.Message
+	if len(env.Error.Details) == 0 || string(env.Error.Details) == "null" {
+		return
+	}
+	var list []string
+	var one string
+	switch {
+	case json.Unmarshal(env.Error.Details, &list) == nil:
+		e.Details = list
+	case json.Unmarshal(env.Error.Details, &one) == nil:
+		e.Details = []string{one}
+	default:
+		e.Details = []string{string(env.Error.Details)}
+	}
 }
 
 func (c *Client) do(ctx context.Context, method, path string, body any) (*http.Response, error) {
@@ -88,8 +140,10 @@ func (c *Client) do(ctx context.Context, method, path string, body any) (*http.R
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		defer resp.Body.Close()
-		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, &APIError{StatusCode: resp.StatusCode, Body: string(raw), URL: url}
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 16384))
+		apiErr := &APIError{StatusCode: resp.StatusCode, Body: string(raw), URL: url}
+		parseAPIError(apiErr)
+		return nil, apiErr
 	}
 
 	return resp, nil
