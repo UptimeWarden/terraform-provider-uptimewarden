@@ -53,7 +53,7 @@ func (d *uptimewardenMonitorDataSource) Schema(_ context.Context, _ datasource.S
 			"url":       schema.StringAttribute{MarkdownDescription: "Target URL or address.", Computed: true},
 			"interval":  schema.Int64Attribute{MarkdownDescription: "Check interval in seconds.", Computed: true},
 			"timeout":   schema.Int64Attribute{MarkdownDescription: "Request timeout in seconds.", Computed: true},
-			"region":    schema.StringAttribute{MarkdownDescription: "Primary check region.", Computed: true},
+			"region":    schema.StringAttribute{MarkdownDescription: "Home region code (`ae`, `brs`, `gwc`, `sea` or `wus3`). Null when the monitor is placed automatically.", Computed: true},
 			"is_active": schema.BoolAttribute{MarkdownDescription: "Whether the monitor is actively checking.", Computed: true},
 		},
 	}
@@ -92,7 +92,7 @@ func (d *uptimewardenMonitorDataSource) Read(ctx context.Context, req datasource
 	state.URL = types.StringValue(m.URL)
 	state.Interval = types.Int64Value(int64(m.Interval))
 	state.Timeout = types.Int64Value(int64(m.Timeout))
-	state.Region = types.StringValue(m.Region)
+	state.Region = regionValue(m.Region)
 	state.IsActive = types.BoolValue(m.IsActive)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)

@@ -116,14 +116,6 @@ func decodeJSON[T any](resp *http.Response) (T, error) {
 	return v, nil
 }
 
-func decodeJSONInto(resp *http.Response, v any) error {
-	defer resp.Body.Close()
-	if err := json.NewDecoder(io.LimitReader(resp.Body, bodyCap)).Decode(v); err != nil {
-		return fmt.Errorf("decode response: %w", err)
-	}
-	return nil
-}
-
 // IsNotFoundErr returns true when the API returned 404, including when the
 // error has been wrapped with fmt.Errorf("%w", ...).
 func IsNotFoundErr(err error) bool {

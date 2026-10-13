@@ -6,7 +6,7 @@ description: |-
 
 # data.uptimewarden_monitor
 
-Reads an existing monitor by public ID. Use this data source to reference a monitor managed outside of Terraform — for example, one created via the UI, the CLI, or another Terraform workspace.
+Reads an existing monitor by public ID. Use this data source to reference a monitor managed outside of Terraform — for example, one created in the dashboard, with the CLI, or in another Terraform workspace.
 
 ## Example Usage
 
@@ -31,5 +31,5 @@ output "homepage_url" {
 - `url` — Target URL or address.
 - `interval` — Check interval in seconds.
 - `timeout` — Request timeout in seconds.
-- `region` — Primary check region.
+- `region` — Home region code (`ae`, `brs`, `gwc`, `sea` or `wus3`). Null when the monitor is placed automatically.
 - `is_active` — Whether the monitor is actively checking.

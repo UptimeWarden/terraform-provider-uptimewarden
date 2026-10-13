@@ -1,12 +1,20 @@
 ---
 page_title: "UptimeWarden Provider"
 description: |-
-  The UptimeWarden provider manages monitors, status pages, escalation policies, on-call schedules, webhook configs, and API tokens.
+  The UptimeWarden provider manages UptimeWarden monitors.
 ---
 
 # UptimeWarden Provider
 
-The UptimeWarden provider lets you manage your monitoring infrastructure as code — same `terraform plan`, same review process, same state file as the rest of your infrastructure.
+The UptimeWarden provider manages your UptimeWarden monitors as code: the same
+`terraform plan`, review process and state file as the rest of your
+infrastructure.
+
+It authenticates with an UptimeWarden API token (`uptw_...`). The API accepts
+these tokens on its `/api/v1` monitor endpoints, so the provider offers the
+`uptimewarden_monitor` resource and data source. Status pages, escalation
+policies and on-call schedules are planned as resources once the API exposes
+them to API tokens.
 
 ## Example Usage
 
@@ -37,12 +45,12 @@ provider "uptimewarden" {
 }
 ```
 
+The token needs the `monitors:read`, `monitors:create` and `monitors:delete`
+permissions (the Monitor Manager group).
+
 ## Schema
-
-### Required
-
-- `api_token` (String, Sensitive) — UptimeWarden API token. Can also be set via the `UW_API_TOKEN` environment variable.
 
 ### Optional
 
-- `base_url` (String) — API base URL. Defaults to `https://app.uptimewarden.online`. Can also be set via `UW_BASE_URL`.
+- `api_token` (String, Sensitive) — UptimeWarden API token. Required, either here or via the `UW_API_TOKEN` environment variable.
+- `base_url` (String) — API base URL. Defaults to `https://app.uptimewarden.online`. Can also be set via `UW_API_URL` (the same variable the CLI and GitHub Actions read). `UW_BASE_URL` is still accepted as an alias; `UW_API_URL` wins when both are set.

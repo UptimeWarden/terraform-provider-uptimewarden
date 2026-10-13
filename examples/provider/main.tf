@@ -8,5 +8,5 @@ terraform {
 }
 
 # Token comes from UW_API_TOKEN environment variable by default.
-# Set base_url to override for staging or self-hosted environments.
+# Set base_url (or UW_API_URL) to point at another API, such as staging.
 provider "uptimewarden" {}

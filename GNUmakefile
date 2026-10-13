@@ -7,7 +7,7 @@ test:
 	go test -v -count=1 -timeout 120s ./...
 
 # Acceptance tests — require a live UptimeWarden API token.
-# Set UW_API_TOKEN and optionally UW_BASE_URL before running.
+# Set UW_API_TOKEN and optionally UW_API_URL before running.
 testacc:
 	TF_ACC=1 go test -v -count=1 -timeout 300s ./internal/provider/...
 

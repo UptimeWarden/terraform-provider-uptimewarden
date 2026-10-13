@@ -2,7 +2,12 @@
 
 The official Terraform provider for [UptimeWarden](https://uptimewarden.online) — an AI-driven uptime monitoring platform.
 
-Manage monitors, status pages, escalation policies, on-call schedules, webhook configs, and API tokens as code alongside the rest of your infrastructure.
+Manage your UptimeWarden monitors as code alongside the rest of your infrastructure.
+
+The provider authenticates with an UptimeWarden API token (`uptw_...`). The API
+accepts these tokens on its `/api/v1` monitor endpoints, so today the provider
+covers monitors. Status pages, escalation policies and on-call schedules are
+planned as resources once the API exposes them to API tokens.
 
 ## Requirements
 
@@ -35,13 +40,7 @@ resource "uptimewarden_monitor" "api" {
   type     = "http"
   url      = "https://api.acme.com/health"
   interval = 60
-  region   = "gwc"
-}
-
-resource "uptimewarden_status_page" "public" {
-  name  = "Acme Status"
-  title = "Acme System Status"
-  slug  = "acme"
+  timeout  = 10
 }
 ```
 
@@ -50,11 +49,21 @@ resource "uptimewarden_status_page" "public" {
 | Resource | Description |
 |---|---|
 | `uptimewarden_monitor` | HTTP, TCP, UDP, SSL, WebSocket, gRPC, MCP, Ping, DNS, and Heartbeat monitors |
-| `uptimewarden_webhook_config` | Outbound webhook endpoints for alert delivery |
-| `uptimewarden_status_page` | Public or private status pages with optional custom domain |
-| `uptimewarden_escalation_policy` | Ordered on-call escalation chains |
-| `uptimewarden_on_call_schedule` | Weekly on-call rotation schedules |
-| `uptimewarden_api_token` | API tokens with granular permission scopes |
+
+### Regions
+
+The `region` attribute takes one of these codes:
+
+| Code | Region |
+|---|---|
+| `ae` | `ae` (Sydney) |
+| `brs` | `brs` (São Paulo) |
+| `gwc` | `gwc` (Sweden Central) |
+| `sea` | `sea` (East Asia) |
+| `wus3` | `wus3` (Phoenix) |
+
+Choosing a region needs a plan that allows it (Professional or Enterprise).
+Leave `region` unset to let UptimeWarden place the monitor (`gwc`).
 
 ## Data Sources
 
@@ -67,21 +76,17 @@ resource "uptimewarden_status_page" "public" {
 | Attribute | Description | Environment variable |
 |---|---|---|
 | `api_token` | UptimeWarden API token | `UW_API_TOKEN` |
-| `base_url` | API base URL (default: `https://app.uptimewarden.online`) | `UW_BASE_URL` |
+| `base_url` | API base URL (default: `https://app.uptimewarden.online`) | `UW_API_URL` (alias: `UW_BASE_URL`) |
+
+`UW_API_URL` is the same variable the CLI and the GitHub Actions read.
 
 ## Import
 
-Most resources support `terraform import` by their public ID (ULID):
+Monitors can be imported by their public ID (ULID):
 
 ```bash
 terraform import uptimewarden_monitor.api 01HWXXXXXXXXXXXXXXXXXXXXXXXXX
-terraform import uptimewarden_status_page.public 01HWXXXXXXXXXXXXXXXXXXXXXXXXX
-terraform import uptimewarden_webhook_config.pd 01HWXXXXXXXXXXXXXXXXXXXXXXXXX
-terraform import uptimewarden_escalation_policy.p1 01HWXXXXXXXXXXXXXXXXXXXXXXXXX
-terraform import uptimewarden_on_call_schedule.primary 01HWXXXXXXXXXXXXXXXXXXXXXXXXX
 ```
-
-> **Note:** `uptimewarden_api_token` does not support import because the plain token value is only available at creation time.
 
 ## Development
 
@@ -92,7 +97,7 @@ make build
 # Run unit tests (no live API required)
 make test
 
-# Run acceptance tests (requires UW_API_TOKEN pointing at a live account)
+# Run acceptance tests (requires UW_API_TOKEN for a live account; UW_API_URL optional)
 make testacc
 ```
 
@@ -100,7 +105,8 @@ To use a local build, add a `dev_overrides` block for
 `uptimewarden/uptimewarden` to your `~/.terraformrc` that points at your
 `$GOPATH/bin` (after `make install`).
 
-Releases are described in [RELEASING.md](./RELEASING.md).
+Changes are listed in [CHANGELOG.md](./CHANGELOG.md). Releases are described
+in [RELEASING.md](./RELEASING.md).
 
 ## License
 
