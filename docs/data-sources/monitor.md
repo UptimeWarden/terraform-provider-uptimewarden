@@ -6,13 +6,15 @@ description: |-
 
 # data.uptimewarden_monitor
 
-Reads an existing monitor by public ID. Use this data source to reference a monitor managed outside of Terraform — for example, one created in the dashboard, with the CLI, or in another Terraform workspace.
+Reads an existing monitor by public ID, with every field the API returns. Use
+it to reference a monitor managed outside this configuration: one created in
+the dashboard, with the CLI, or in another Terraform workspace.
 
 ## Example Usage
 
 ```hcl
 data "uptimewarden_monitor" "homepage" {
-  id = "01HWXXXXXXXXXXXXXXXXXXXXXXXXX"
+  id = "01HWXXXXXXXXXXXXXXXXXXXXXXX"
 }
 
 output "homepage_url" {
@@ -26,10 +28,8 @@ output "homepage_url" {
 
 ## Attribute Reference
 
-- `name` — Monitor name.
-- `type` — Protocol type.
-- `url` — Target URL or address.
-- `interval` — Check interval in seconds.
-- `timeout` — Request timeout in seconds.
-- `region` — Home region code (`ae`, `brs`, `gwc`, `sea` or `wus3`). Null when the monitor is placed automatically.
-- `is_active` — Whether the monitor is actively checking.
+Every attribute of the [`uptimewarden_monitor` resource](../resources/monitor.md),
+read-only, plus:
+
+- `last_checked` (String, Computed) — Time of the last check. API field: `lastChecked`.
+- `heartbeat_last_ping_at` (String, Computed) — Heartbeat monitors: time of the last ping. API field: `heartbeatLastPingAt`.

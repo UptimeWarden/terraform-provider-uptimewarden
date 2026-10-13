@@ -2,12 +2,15 @@
 
 The official Terraform provider for [UptimeWarden](https://uptimewarden.online) — an AI-driven uptime monitoring platform.
 
-Manage your UptimeWarden monitors as code alongside the rest of your infrastructure.
+Manage your UptimeWarden monitors as code alongside the rest of your
+infrastructure: every monitor setting the dashboard has — checks, regions and
+consensus, thresholds, alert routing, escalation, webhooks, maintenance
+windows and heartbeats.
 
-The provider authenticates with an UptimeWarden API token (`uptw_...`). The API
-accepts these tokens on its `/api/v1` monitor endpoints, so today the provider
-covers monitors. Status pages, escalation policies and on-call schedules are
-planned as resources once the API exposes them to API tokens.
+The provider authenticates with an UptimeWarden API token (`uptw_...`) on the
+`/api/v1` API. Escalation policies and webhooks are read (by name) through data
+sources; resources for status pages, escalation policies, webhooks and on-call
+schedules are planned once the API accepts API tokens for writing them.
 
 ## Requirements
 
@@ -35,20 +38,34 @@ provider "uptimewarden" {
   # api_token = var.uw_api_token
 }
 
+data "uptimewarden_escalation_policy" "p1" {
+  name = "P1 on-call"
+}
+
 resource "uptimewarden_monitor" "api" {
-  name     = "Production API"
-  type     = "http"
-  url      = "https://api.acme.com/health"
-  interval = 60
-  timeout  = 10
+  name                  = "Production API"
+  type                  = "http"
+  url                   = "https://api.acme.com/health"
+  interval              = 60
+  timeout               = 10
+  expected_status_codes = "200-299"
+  escalation_policy_id  = data.uptimewarden_escalation_policy.p1.id
+}
+
+resource "uptimewarden_monitor" "backup" {
+  name     = "Nightly backup"
+  type     = "heartbeat"
+  interval = 86400
 }
 ```
+
+The full attribute list is in [docs/resources/monitor.md](./docs/resources/monitor.md).
 
 ## Resources
 
 | Resource | Description |
 |---|---|
-| `uptimewarden_monitor` | HTTP, TCP, UDP, SSL, WebSocket, gRPC, MCP, Ping, DNS, and Heartbeat monitors |
+| `uptimewarden_monitor` | HTTP, TCP, UDP, SSL, WebSocket, gRPC, MCP, Ping, DNS, and Heartbeat monitors with all their settings |
 
 ### Regions
 
@@ -63,13 +80,18 @@ The `region` attribute takes one of these codes:
 | `wus3` | `wus3` (Phoenix) |
 
 Choosing a region needs a plan that allows it (Professional or Enterprise).
-Leave `region` unset to let UptimeWarden place the monitor (`gwc`).
+Leave `region` unset to let UptimeWarden place the monitor (`gwc`). The
+`uptimewarden_regions` data source returns the active codes and your plan's
+allowance.
 
 ## Data Sources
 
 | Data Source | Description |
 |---|---|
 | `data.uptimewarden_monitor` | Look up an existing monitor by public ID |
+| `data.uptimewarden_regions` | Active regions and your plan's region allowance |
+| `data.uptimewarden_escalation_policy` | Look up an escalation policy by name |
+| `data.uptimewarden_webhook` | Look up a webhook configuration by name |
 
 ## Provider Configuration
 
