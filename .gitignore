@@ -1,0 +1,9 @@
+dist/
+/terraform-provider-uptimewarden
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+.env
+.env.*
+.DS_Store
